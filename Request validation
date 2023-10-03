@@ -1,0 +1,109 @@
+const express = require('express');
+const { graphqlHTTP } = require('express-graphql');
+const { buildSchema } = require('graphql');
+const { authenticateUser, authorizeUser } = require('./auth'); // Import your authentication and authorization functions
+const { validateInput, sanitizeInput } = require('./validation'); // Import your input validation and sanitization functions
+
+// Define your GraphQL schema
+const schema = buildSchema(`
+  type Query {
+    getUser(id: ID!): User
+  }
+
+  type User {
+    id: ID!
+    username: String!
+    email: String!
+  }
+
+  type Mutation {
+    updateUser(id: ID!, input: UserInput!): User
+  }
+
+  input UserInput {
+    username: String
+    email: String
+  }
+`);
+
+// Sample user data (for demonstration)
+const users = [
+  { id: '1', username: 'user1', email: 'user1@example.com' },
+  { id: '2', username: 'user2', email: 'user2@example.com' },
+];
+
+// Create a resolver for the query and mutation
+const root = {
+  getUser: (args) => {
+    // Simulate fetching a user by ID (for demonstration)
+    const user = users.find((user) => user.id === args.id);
+    return user;
+  },
+  updateUser: (args) => {
+    // Simulate updating a user (for demonstration)
+    const userIndex = users.findIndex((user) => user.id === args.id);
+    if (userIndex === -1) {
+      throw new Error('User not found');
+    }
+
+    // Apply input validation and sanitization
+    const { username, email } = args.input;
+    validateInput(username, email); // Implement input validation function
+    const sanitizedUsername = sanitizeInput(username); // Implement input sanitization function
+
+    // Update the user (for demonstration)
+    users[userIndex] = {
+      ...users[userIndex],
+      username: sanitizedUsername,
+      email,
+    };
+
+    return users[userIndex];
+  },
+};
+
+// Create an Express.js app
+const app = express();
+
+// Define a middleware function for request authentication
+app.use('/graphql', (req, res, next) => {
+  // Implement your authentication logic (e.g., JWT validation, session management)
+  const user = authenticateUser(req); // Implement authentication function
+  if (!user) {
+    res.status(401).json({ error: 'Authentication failed' });
+    return;
+  }
+
+  // Attach the authenticated user to the request for later use
+  req.user = user;
+  next();
+});
+
+// Define a middleware function for request authorization
+app.use('/graphql', (req, res, next) => {
+  // Implement your authorization logic based on req.user (e.g., role-based access control)
+  const authorized = authorizeUser(req.user); // Implement authorization function
+  if (!authorized) {
+    res.status(403).json({ error: 'Authorization failed' });
+    return;
+  }
+
+  next();
+});
+
+// Use express-graphql middleware with your schema and resolvers
+app.use(
+  '/graphql',
+  graphqlHTTP({
+    schema: schema,
+    rootValue: root,
+    graphiql: true, // Enable the GraphiQL interface for testing
+  })
+);
+
+// Start the server
+const port = 4000;
+app.listen(port, () => {
+  console.log(`GraphQL server is running at http://localhost:${port}/graphql`);
+});
+                        
