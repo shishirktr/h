@@ -1,0 +1,53 @@
+const express = require('express');
+const { graphqlHTTP } = require('express-graphql');
+const { buildSchema, GraphQLSchema } = require('graphql');
+const { validate } = require('graphql/validation');
+const { parse } = require('graphql/language');
+const { formatError } = require('graphql/error');
+
+// Define your GraphQL schema
+const schema = buildSchema(`
+  type Query {
+    hello: String
+  }
+`);
+
+// Resolver function for the 'hello' query
+const root = {
+  hello: () => 'Hello, World!',
+};
+
+// Custom middleware for GraphQL request validation
+const validateGraphQLRequest = (req, res, next) => {
+  try {
+    // Parse and validate the incoming GraphQL query
+    const documentAST = parse(req.body.query);
+    const validationErrors = validate(new GraphQLSchema({ query: schema }), documentAST);
+
+    if (validationErrors && validationErrors.length > 0) {
+      // If there are validation errors, respond with a 400 Bad Request
+      const errorMessages = validationErrors.map(formatError);
+      return res.status(400).json({ errors: errorMessages });
+    }
+
+    // If validation passes, proceed to the GraphQL execution layer
+    next();
+  } catch (error) {
+    // Handle any unexpected errors
+    console.error(error);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+};
+
+const app = express();
+
+// Apply the request validation middleware to the GraphQL endpoint
+app.use('/graphql', express.json(), validateGraphQLRequest, graphqlHTTP({
+  schema: schema,
+  rootValue: root,
+  graphiql: true, // Enable the GraphiQL interface for testing
+}));
+
+app.listen(4000, () => {
+  console.log('GraphQL server is running on http://localhost:4000/graphql');
+});
